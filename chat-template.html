@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Astra · Chat con IA</title>
+  <meta name="description" content="Plantilla de chat con IA y mascota animada." />
+  <style>
+    :root {
+      color-scheme: light;
+      /* Paleta institucional: azul, amarillo y rojo */
+      --navy: #0a2a5e;
+      --navy-dark: #061a3d;
+      --blue: #1d4fa8;
+      --gold: #f5b400;
+      --gold-dark: #c98f00;
+      --red: #ce1126;
+
+      --bg: #f4f6fb;
+      --surface: #ffffff;
+      --border: #dbe2f0;
+      --text: #0f1d3a;
+      --muted: #5a6a8a;
+
+      --content-width: 960px;
+      --gutter: 16px;
+      --mascot-size: 104px;
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; }
+    [hidden] { display: none !important; }
+
+    html, body { height: 100%; }
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--bg); /* fondo liso, sin adornos */
+      overflow: hidden;
+    }
+
+    /* El chat ocupa toda la pantalla */
+    .app {
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Mantiene el contenido centrado y legible en pantallas anchas,
+       mientras las barras ocupan todo el ancho */
+    .inset {
+      padding-inline: max(var(--gutter), calc((100% - var(--content-width)) / 2));
+    }
+
+    /* ===== Encabezado ===== */
+    header {
+      position: relative;
+      background: var(--navy);
+      color: #fff;
+      padding-block: 12px;
+      padding-top: max(12px, env(safe-area-inset-top));
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      flex: none;
+    }
+    /* Franja tricolor sutil */
+    header::after {
+      content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px;
+      background: linear-gradient(90deg, var(--gold) 0 50%, var(--blue) 50% 75%, var(--red) 75% 100%);
+    }
+    .brand { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+    .brand strong { font-size: 1.05rem; letter-spacing: 0.03em; white-space: nowrap; }
+    .brand strong span { color: var(--gold); }
+    .brand small { font-size: 0.75rem; color: #b9c6e4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ghost-btn {
+      flex: none;
+      background: transparent; color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.35); border-radius: 10px;
+      padding: 7px 12px; font: inherit; font-size: 0.85rem; cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .ghost-btn:hover { background: rgba(255, 255, 255, 0.1); border-color: var(--gold); }
+
+    /* ===== Mensajes (área que crece y hace scroll) ===== */
+    .messages {
+      flex: 1; min-height: 0;
+      overflow-y: auto;
+      padding-block: 20px;
+      display: flex; flex-direction: column; gap: 12px;
+      scroll-behavior: smooth;
+    }
+    .msg {
+      max-width: min(80%, 680px);
+      padding: 10px 14px; border-radius: 16px;
+      line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere;
+      animation: pop 0.25s ease-out;
+    }
+    @keyframes pop { from { opacity: 0; transform: translateY(8px); } }
+    .msg.ai {
+      align-self: flex-start;
+      background: var(--surface); border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+    .msg.user {
+      align-self: flex-end;
+      background: var(--navy); color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .msg.error { border-color: var(--red); color: var(--red); }
+
+    .typing { display: inline-flex; gap: 4px; padding: 4px 0; }
+    .typing i {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--blue);
+      animation: dots 1s infinite ease-in-out;
+    }
+    .typing i:nth-child(2) { animation-delay: 0.15s; }
+    .typing i:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes dots { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-5px); opacity: 1; } }
+
+    /* ===== Dock de la mascota =====
+       Es una fila propia entre los mensajes y la barra de escritura: la mascota
+       "se para" sobre la barra sin tapar nunca ningún mensaje. */
+    .dock {
+      flex: none;
+      display: flex; align-items: flex-end; gap: 12px;
+      padding-block: 0;
+    }
+    .suggestions {
+      flex: 1; min-width: 0;
+      display: flex; gap: 8px;
+      overflow-x: auto; scrollbar-width: none;
+      padding-bottom: 12px;
+    }
+    .suggestions::-webkit-scrollbar { display: none; }
+    .chip {
+      flex: none;
+      background: var(--surface); color: var(--navy);
+      border: 1px solid var(--border); border-radius: 999px;
+      padding: 7px 14px; font: inherit; font-size: 0.85rem; cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .chip:hover { border-color: var(--gold-dark); background: #fffbeb; }
+
+    .spacer { flex: 1; }
+
+    /* Globo de estado junto a la mascota */
+    .bubble {
+      position: relative;
+      margin-bottom: calc(var(--mascot-size) * 0.55);
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 6px 12px; font-size: 0.8rem; color: var(--muted);
+      white-space: nowrap;
+    }
+    .bubble::after {
+      content: ""; position: absolute; right: -6px; top: 50%;
+      width: 10px; height: 10px; margin-top: -5px;
+      background: var(--surface);
+      border-right: 1px solid var(--border); border-top: 1px solid var(--border);
+      transform: rotate(45deg);
+    }
+    .dock[data-state="thinking"] .bubble { color: var(--blue); }
+    .dock[data-state="talking"] .bubble { color: var(--gold-dark); }
+
+    /* ===== Barra de escritura ===== */
+    .composer {
+      flex: none;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding-block: 12px;
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
+      display: flex; align-items: flex-end; gap: 10px;
+    }
+    .composer textarea {
+      flex: 1; resize: none; max-height: 140px;
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 14px;
+      padding: 12px 14px; font: inherit; line-height: 1.4;
+    }
+    .composer textarea::placeholder { color: var(--muted); }
+    .composer textarea:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(29, 79, 168, 0.18); }
+    .send {
+      flex: none;
+      background: var(--gold); color: var(--navy-dark);
+      border: 0; border-radius: 14px;
+      width: 48px; height: 48px; font-size: 1.2rem; font-weight: 700; cursor: pointer;
+      transition: background 0.2s, transform 0.15s;
+    }
+    .send:hover:not(:disabled) { background: #ffc61f; transform: translateY(-1px); }
+    .send:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+    .ghost-btn:focus-visible, .chip:focus-visible, .send:focus-visible, .mascot:focus-visible {
+      outline: 2px solid var(--blue); outline-offset: 2px;
+    }
+    header .ghost-btn:focus-visible { outline-color: var(--gold); }
+
+    /* ===== Mascota ===== */
+    .mascot { flex: none; width: var(--mascot-size); height: auto; overflow: visible; cursor: pointer; }
+    .mascot * { transform-box: fill-box; }
+
+    .f-gold { fill: var(--gold); }
+    .f-navy { fill: var(--navy); }
+    .s-navy { stroke: var(--navy); }
+    .s-gold { stroke: var(--gold); }
+
+    .m-bob { animation: bob 3.2s ease-in-out infinite; }
+    @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+
+    .m-eye { transform-origin: center; animation: blink 5s infinite; }
+    @keyframes blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.08); } }
+    .m-pupil { transition: transform 0.12s ease-out; transform: translate(var(--px, 0px), var(--py, 0px)); }
+
+    .m-antenna-light { animation: antenna 2s ease-in-out infinite; }
+    @keyframes antenna {
+      0%, 100% { filter: drop-shadow(0 0 2px var(--gold)); }
+      50%      { filter: drop-shadow(0 0 8px var(--gold)); }
+    }
+
+    .m-arm-r { transform-origin: 12% 10%; }
+    .mascot.waving .m-arm-r { animation: wave 0.6s ease-in-out 3; }
+    @keyframes wave { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-55deg); } }
+
+    .m-mouth-talk { display: none; transform-origin: center; }
+
+    /* Pensando: inclina la cabeza y mira hacia arriba */
+    .mascot[data-state="thinking"] .m-pupil { transform: translate(6px, -8px); }
+    .mascot[data-state="thinking"] .m-antenna-light { animation-duration: 0.6s; }
+    .mascot[data-state="thinking"] .m-head { transform-origin: 50% 100%; animation: tilt 1.6s ease-in-out infinite; }
+    @keyframes tilt { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+
+    /* Hablando: mueve la boca y rebota */
+    .mascot[data-state="talking"] .m-mouth-smile { display: none; }
+    .mascot[data-state="talking"] .m-mouth-talk { display: block; animation: talk 0.28s ease-in-out infinite alternate; }
+    @keyframes talk { from { transform: scaleY(0.35); } to { transform: scaleY(1.1); } }
+    .mascot[data-state="talking"] .m-bob { animation: hop 0.56s ease-in-out infinite; }
+    @keyframes hop { 50% { transform: translateY(-4px); } }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 640px) {
+      :root { --gutter: 12px; --mascot-size: 76px; }
+      .messages { padding-block: 14px; }
+      .msg { max-width: 90%; }
+      .brand small { display: none; }
+      .ghost-btn .long { display: none; }
+      .composer textarea { font-size: 16px; } /* evita el zoom automático en iOS */
+      .bubble { display: none; }
+      .dock[data-state="thinking"] .bubble,
+      .dock[data-state="talking"] .bubble { display: block; }
+    }
+    @media (max-height: 520px) {
+      :root { --mascot-size: 60px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="inset">
+      <div class="brand">
+        <strong>ASTRA <span>·</span> Asistente IA</strong>
+        <small>CodeFest Ad Astra 2026</small>
+      </div>
+      <button class="ghost-btn" id="clear" type="button" aria-label="Nueva conversación">Nueva<span class="long"> conversación</span></button>
+    </header>
+
+    <!-- Conversación -->
+    <main class="messages inset" id="log" role="log" aria-live="polite" aria-label="Conversación"></main>
+
+    <!-- Mascota sobre la barra de escritura -->
+    <div class="dock inset" id="dock" data-state="idle">
+      <div class="suggestions" id="suggestions">
+        <button class="chip" type="button">¿Qué puedes hacer?</button>
+        <button class="chip" type="button">Cuéntame algo del espacio</button>
+        <button class="chip" type="button">Dame una idea</button>
+      </div>
+      <div class="spacer" id="spacer" hidden></div>
+
+      <div class="bubble" id="status" role="status">Lista para ayudar</div>
+
+      <svg class="mascot" id="mascot" data-state="idle" viewBox="0 0 200 198"
+           role="img" aria-label="Astra, la mascota astronauta. Haz clic para saludar." tabindex="0">
+        <defs>
+          <radialGradient id="g-helmet" cx="35%" cy="25%" r="80%">
+            <stop offset="0%" stop-color="#ffffff" />
+            <stop offset="100%" stop-color="#d5deef" />
+          </radialGradient>
+          <linearGradient id="g-visor" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#16428a" />
+            <stop offset="100%" stop-color="#061a3d" />
+          </linearGradient>
+        </defs>
+
+        <ellipse cx="100" cy="195" rx="40" ry="3.5" fill="#0a2a5e" opacity="0.18" />
+
+        <g class="m-bob">
+          <g class="m-body">
+            <!-- Piernas -->
+            <rect class="f-navy" x="76" y="176" width="18" height="18" rx="8" />
+            <rect class="f-navy" x="106" y="176" width="18" height="18" rx="8" />
+            <!-- Cuerpo -->
+            <rect x="66" y="122" width="68" height="62" rx="26" fill="url(#g-helmet)" />
+            <circle class="f-navy" cx="100" cy="152" r="10" />
+            <circle class="f-gold" cx="100" cy="152" r="5.5" />
+            <!-- Brazos -->
+            <g transform="rotate(12 59 130)">
+              <rect x="48" y="130" width="22" height="42" rx="11" fill="#dbe4f5" />
+            </g>
+            <g transform="rotate(-12 141 130)">
+              <rect class="m-arm-r" x="130" y="130" width="22" height="42" rx="11" fill="#dbe4f5" />
+            </g>
+          </g>
+
+          <!-- Cabeza -->
+          <g class="m-head">
+            <line class="s-navy" x1="100" y1="22" x2="100" y2="42" stroke-width="4" stroke-linecap="round" />
+            <circle class="m-antenna-light f-gold" cx="100" cy="18" r="7" />
+            <circle class="f-gold" cx="41" cy="84" r="9" />
+            <circle class="f-gold" cx="159" cy="84" r="9" />
+            <ellipse cx="100" cy="82" rx="60" ry="48" fill="url(#g-helmet)" />
+            <rect x="56" y="58" width="88" height="56" rx="26" fill="url(#g-visor)" class="s-gold" stroke-width="2.5" />
+            <path d="M68 68 Q80 62 92 64" stroke="#fff" stroke-opacity="0.35" stroke-width="4" stroke-linecap="round" fill="none" />
+
+            <!-- Ojos -->
+            <g class="m-eye">
+              <ellipse cx="80" cy="84" rx="10" ry="12" fill="#f4f8ff" />
+              <circle class="m-pupil f-navy" cx="80" cy="85" r="5.5" />
+            </g>
+            <g class="m-eye">
+              <ellipse cx="120" cy="84" rx="10" ry="12" fill="#f4f8ff" />
+              <circle class="m-pupil f-navy" cx="120" cy="85" r="5.5" />
+            </g>
+
+            <!-- Boca -->
+            <path class="m-mouth-smile s-gold" d="M91 102 Q100 109 109 102" stroke-width="3" stroke-linecap="round" fill="none" />
+            <ellipse class="m-mouth-talk f-gold" cx="100" cy="104" rx="7" ry="6" />
+
+            <!-- Mejillas -->
+            <circle cx="66" cy="100" r="5" fill="#ce1126" opacity="0.28" />
+            <circle cx="134" cy="100" r="5" fill="#ce1126" opacity="0.28" />
+          </g>
+        </g>
+      </svg>
+    </div>
+
+    <form class="composer inset" id="form">
+      <textarea id="input" rows="1" placeholder="Escribe tu mensaje…" aria-label="Mensaje" autocomplete="off"></textarea>
+      <button class="send" id="send" type="submit" aria-label="Enviar" disabled>➤</button>
+    </form>
+  </div>
+
+  <script>
+    // ====== Configuración ======
+    // Endpoint del backend. Debe aceptar POST { message, history } y responder { reply }.
+    // Si es null, se usa una respuesta simulada para probar la interfaz.
+    const API_URL = null;
+    const WELCOME = "¡Hola! Soy Astra 🚀 Estoy lista para conversar. ¿En qué te ayudo hoy?";
+
+    // ====== Elementos ======
+    const $ = (id) => document.getElementById(id);
+    const log = $("log"), form = $("form"), input = $("input"), sendBtn = $("send");
+    const mascot = $("mascot"), dock = $("dock"), statusEl = $("status");
+    const suggestions = $("suggestions"), spacer = $("spacer");
+    const history = [];
+    let busy = false;
+
+    // ====== Mascota ======
+    const STATUS = { idle: "Lista para ayudar", thinking: "Pensando…", talking: "Respondiendo…" };
+
+    function setMascot(state) {
+      mascot.dataset.state = state;
+      dock.dataset.state = state;
+      statusEl.textContent = STATUS[state];
+    }
+
+    function wave() {
+      mascot.classList.remove("waving");
+      void mascot.getBoundingClientRect(); // reinicia la animación
+      mascot.classList.add("waving");
+    }
+    mascot.addEventListener("click", wave);
+    mascot.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); wave(); } });
+
+    // Las pupilas siguen al puntero
+    document.addEventListener("pointermove", (e) => {
+      if (mascot.dataset.state === "thinking") return;
+      const r = mascot.getBoundingClientRect();
+      const dx = e.clientX - (r.left + r.width / 2);
+      const dy = e.clientY - (r.top + r.height * 0.4);
+      const d = Math.hypot(dx, dy) || 1;
+      const k = Math.min(1, d / 300);
+      mascot.style.setProperty("--px", ((dx / d) * 4 * k).toFixed(2) + "px");
+      mascot.style.setProperty("--py", ((dy / d) * 4 * k).toFixed(2) + "px");
+    });
+
+    // Las sugerencias solo se muestran con la conversación vacía
+    function showSuggestions(show) {
+      suggestions.hidden = !show;
+      spacer.hidden = show;
+    }
+
+    // ====== Mensajes ======
+    function addMessage(role, text = "", extraClass = "") {
+      const el = document.createElement("div");
+      el.className = `msg ${role} ${extraClass}`.trim();
+      el.textContent = text; // textContent: nunca insertar HTML de la IA sin sanitizar
+      log.appendChild(el);
+      log.scrollTop = log.scrollHeight;
+      return el;
+    }
+
+    function addTyping() {
+      const el = addMessage("ai");
+      el.innerHTML = '<span class="typing" aria-label="Escribiendo"><i></i><i></i><i></i></span>';
+      return el;
+    }
+
+    // Muestra la respuesta palabra por palabra mientras la mascota "habla"
+    function streamText(el, text) {
+      return new Promise((resolve) => {
+        const words = text.split(/(\s+)/);
+        let i = 0;
+        el.textContent = "";
+        const tick = () => {
+          if (i >= words.length) return resolve();
+          el.textContent += words[i++];
+          log.scrollTop = log.scrollHeight;
+          setTimeout(tick, 35);
+        };
+        tick();
+      });
+    }
+
+    // ====== Comunicación con la IA ======
+    async function askAI(message) {
+      if (!API_URL) {
+        await new Promise((r) => setTimeout(r, 1200 + Math.random() * 800));
+        return `Esta es una respuesta de ejemplo a: “${message}”.\nConecta el endpoint en API_URL para hablar con tu IA real.`;
+      }
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, history }),
+      });
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+      const data = await res.json();
+      return data.reply;
+    }
+
+    async function send(text) {
+      text = text.trim();
+      if (!text || busy) return;
+      busy = true;
+      sendBtn.disabled = true;
+      showSuggestions(false);
+
+      addMessage("user", text);
+      history.push({ role: "user", content: text });
+      input.value = "";
+      autosize();
+
+      setMascot("thinking");
+      const typing = addTyping();
+      try {
+        const reply = await askAI(text);
+        setMascot("talking");
+        await streamText(typing, reply);
+        history.push({ role: "assistant", content: reply });
+      } catch (err) {
+        typing.textContent = "No pude conectar con el servidor. Inténtalo de nuevo.";
+        typing.classList.add("error");
+      } finally {
+        busy = false;
+        setMascot("idle");
+        sendBtn.disabled = !input.value.trim();
+        input.focus();
+      }
+    }
+
+    // ====== Eventos ======
+    function autosize() {
+      input.style.height = "auto";
+      input.style.height = Math.min(input.scrollHeight, 140) + "px";
+    }
+    input.addEventListener("input", () => { autosize(); sendBtn.disabled = busy || !input.value.trim(); });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); }
+    });
+    form.addEventListener("submit", (e) => { e.preventDefault(); send(input.value); });
+
+    suggestions.addEventListener("click", (e) => {
+      if (e.target.classList.contains("chip")) send(e.target.textContent);
+    });
+
+    $("clear").addEventListener("click", () => {
+      history.length = 0;
+      log.replaceChildren();
+      addMessage("ai", WELCOME);
+      showSuggestions(true);
+      wave();
+    });
+
+    // ====== Inicio ======
+    addMessage("ai", WELCOME);
+    setTimeout(wave, 600);
+  </script>
+</body>
+</html>

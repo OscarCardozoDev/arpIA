@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>arpIA</title>
+
+  <!-- Fuente de la página: Special Elite -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Special+Elite&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS (Play CDN). Para producción, compila Tailwind con su CLI. -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // El modo oscuro/claro se controla con la clase "dark" en <html>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: {
+        // Special Elite solo existe en peso normal; si no carga, cae a una fuente de máquina de escribir
+        fontFamily: { sans: ['"Special Elite"', '"Courier New"', 'ui-monospace', 'monospace'] },
+        colors: {
+        // Azul oscuro institucional en versión pastel (el 500 es el color principal)
+        navy: { 50: '#eef2f9', 100: '#e1e8f4', 200: '#c5d2e8', 300: '#9fb4d9', 400: '#7b96c9',
+                500: '#5f7fb8', 600: '#4a6699', 700: '#3a527d', 800: '#2b3d61', 900: '#1f2c48', 950: '#16203a' },
+      } } },
+    };
+  </script>
+
+  <!-- reCAPTCHA v2: se carga de forma asíncrona y avisa con un evento cuando está listo -->
+  <script>
+    window.recaptchaReady = false;
+    window.onRecaptchaLoad = () => { window.recaptchaReady = true; window.dispatchEvent(new Event('recaptcha-ready')); };
+  </script>
+  <script src="https://www.google.com/recaptcha/api.js?onload=onRecaptchaLoad&render=explicit" async defer></script>
+
+  <style>
+    /* Special Elite no tiene negrita: se evita la "negrita falsa" del navegador, que emborrona el trazo */
+    body { font-synthesis: none; }
+
+    /* Scrollbar discreta, como en las apps de chat modernas */
+    .scroll-thin { scrollbar-width: thin; scrollbar-color: rgba(128,128,128,.35) transparent; }
+    .scroll-thin::-webkit-scrollbar { width: 8px; }
+    .scroll-thin::-webkit-scrollbar-thumb { background: rgba(128,128,128,.35); border-radius: 8px; }
+    /* ---- Sidebar ----
+       Un único atributo (body[data-sb]) controla el estado. En escritorio se anima el
+       ANCHO (0 ↔ 260px) en vez de usar márgenes negativos, así el chat siempre vuelve
+       a su posición exacta. */
+    #sidebar { position: fixed; inset: 0 auto 0 0; z-index: 40; width: 260px;
+               transform: translateX(-100%); visibility: hidden;
+               transition: transform .3s ease, visibility 0s .3s; }
+    body[data-sb="open"] #sidebar { transform: none; visibility: visible; transition: transform .3s ease, visibility 0s; }
+    #overlay { display: none; }
+    body[data-sb="open"] #overlay { display: block; }
+    #openSidebar { display: none; }
+    body[data-sb="closed"] #openSidebar { display: flex; }
+    @media (min-width: 768px) {
+      #sidebar { position: relative; flex: none; width: 0; overflow: hidden; transform: none;
+                 transition: width .3s ease, visibility 0s .3s; }
+      body[data-sb="open"] #sidebar { width: 260px; transition: width .3s ease, visibility 0s; }
+      #overlay { display: none !important; }
+    }
+
+    /* ---- Mascota pixel-art: animaciones "a saltos" (steps) para mantener el look retro ---- */
+    .pixelart { image-rendering: pixelated; }
+    .px-bob  { animation: pxbob 1.2s steps(1) infinite; }
+    @keyframes pxbob { 0%, 49.9% { transform: translateY(0); } 50%, 100% { transform: translateY(-1px); } }
+    .px-hop  { animation: pxhop .6s steps(1) 1; }
+    @keyframes pxhop { 0% { transform: translateY(0); } 20% { transform: translateY(-3px); } 40% { transform: translateY(-5px); }
+                       60% { transform: translateY(-3px); } 80% { transform: translateY(-1px); } 100% { transform: translateY(0); } }
+    .px-tip  { animation: pxtip 1.6s steps(1) infinite; }
+    @keyframes pxtip { 0%, 60% { opacity: 1; } 61%, 100% { opacity: .25; } }
+    .px-eyes-closed, .px-eyes-up, .px-mouth-open { opacity: 0; }
+    .px-eyes-open   { animation: pxopen 4.2s steps(1) infinite; }
+    .px-eyes-closed { animation: pxclosed 4.2s steps(1) infinite; }
+    @keyframes pxopen   { 0%, 93% { opacity: 1; } 94%, 100% { opacity: 0; } }
+    @keyframes pxclosed { 0%, 93% { opacity: 0; } 94%, 100% { opacity: 1; } }
+    /* Pensando: mira arriba y la antena parpadea rápido */
+    #mascot[data-state="thinking"] .px-eyes-open,
+    #mascot[data-state="thinking"] .px-eyes-closed { animation: none; opacity: 0; }
+    #mascot[data-state="thinking"] .px-eyes-up { opacity: 1; }
+    #mascot[data-state="thinking"] .px-tip { animation-duration: .5s; }
+    /* Hablando: la boca se abre y se cierra */
+    #mascot[data-state="talking"] .px-mouth-closed { animation: pxmc .36s steps(1) infinite; }
+    #mascot[data-state="talking"] .px-mouth-open   { animation: pxmo .36s steps(1) infinite; }
+    @keyframes pxmc { 0%, 49.9% { opacity: 0; } 50%, 100% { opacity: 1; } }
+    @keyframes pxmo { 0%, 49.9% { opacity: 1; } 50%, 100% { opacity: 0; } }
+
+    /* El widget de reCAPTCHA mide 304px: en pantallas muy angostas se reduce un poco */
+    @media (max-width: 400px) { #recaptcha > div { transform: scale(.88); transform-origin: center top; } }
+
+    /* Animación de entrada de cada mensaje */
+    @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+    .rise { animation: rise .25s ease-out; }
+    @media (prefers-reduced-motion: reduce) {
+      .rise, .animate-bounce, .animate-pulse, .px-bob, .px-hop, .px-tip, .px-eyes-open, .px-eyes-closed,
+      #mascot .px-mouth-open, #mascot .px-mouth-closed { animation: none !important; }
+      #sidebar { transition: none !important; }
+    }
+  </style>
+</head>
+
+<body class="h-full overflow-hidden bg-white text-navy-950 dark:bg-navy-950 dark:text-navy-50 antialiased font-sans">
+  <script>document.body.dataset.sb = matchMedia('(min-width: 768px)').matches ? 'open' : 'closed';</script>
+
+  <!-- ============ Sprite de iconos (SVG reutilizable con <use>) ============ -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0" aria-hidden="true">
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+    <symbol id="i-sidebar" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></symbol>
+    <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5M9 18h6M10 22h4"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></symbol>
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16.2 7.8-2.1 6.3-6.3 2.1 2.1-6.3Z"/></symbol>
+    <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-dashboard" viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-eyeoff" viewBox="0 0 24 24"><path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c6.5 0 10 8 10 8a13 13 0 0 1-1.7 2.7M6.6 6.6A13.5 13.5 0 0 0 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.4-1.6"/><path d="M14.1 14.1a3 3 0 1 1-4.2-4.2M2 2l20 20"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+    <symbol id="i-login" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5M15 12H3"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5Z"/><path d="M14 2v6h6"/></symbol>
+  </svg>
+
+  <div class="flex h-dvh">
+
+    <!-- Fondo oscuro tras el sidebar en móvil (al tocarlo, se cierra) -->
+    <div id="overlay" class="fixed inset-0 z-30 bg-black/60"></div>
+
+    <!-- ============ SIDEBAR (siempre oscuro) ============ -->
+    <!-- Móvil: panel deslizable. Escritorio: columna fija que se puede colapsar. -->
+    <aside id="sidebar" class="bg-navy-900 text-[#ececec]">
+     <div class="flex h-full w-[260px] flex-col">
+
+      <!-- Logo + botón para colapsar -->
+      <div class="flex items-center justify-between p-2.5">
+        <svg class="logo-mascot h-10 w-10" viewBox="0 0 20 20" aria-hidden="true"></svg>
+        <button id="closeSidebar" class="rounded-lg p-2 text-navy-200 hover:bg-navy-800" aria-label="Cerrar barra lateral">
+          <i data-i="sidebar" class="h-5 w-5"></i>
+        </button>
+      </div>
+
+      <!-- Navegación principal -->
+      <nav class="space-y-0.5 px-2.5" aria-label="Navegación principal">
+        <button data-nav="dashboard" class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm hover:bg-navy-800">
+          <i data-i="dashboard" class="h-[18px] w-[18px]"></i> Dashboard
+          <i data-i="lock" class="lock-icon ml-auto h-4 w-4 text-navy-300"></i>
+        </button>
+        <button data-nav="chat" class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm hover:bg-navy-800">
+          <i data-i="spark" class="h-[18px] w-[18px]"></i> arpIA
+          <i data-i="lock" class="lock-icon ml-auto h-4 w-4 text-navy-300"></i>
+        </button>
+      </nav>
+
+      <div class="flex min-h-0 flex-1 flex-col">
+        <!-- Sin sesión: mensaje para iniciar sesión -->
+        <div id="signinNotice" class="mx-2.5 mt-4 rounded-xl border border-navy-700 bg-navy-800/60 p-3 text-sm">
+          <p class="flex items-start gap-2 text-navy-100">
+            <i data-i="lock" class="mt-0.5 h-4 w-4 text-navy-300"></i>
+            <span>Inicia sesión para usar arpIA y ver tu Dashboard.</span>
+          </p>
+          <button id="signinBtn" class="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-navy-500 py-2 font-medium text-white hover:bg-navy-400">
+            <i data-i="login" class="h-4 w-4"></i> Iniciar sesión
+          </button>
+        </div>
+
+        <!-- Con sesión: nuevo chat, búsqueda e historial -->
+        <div id="chatTools" class="hidden min-h-0 flex-1 flex-col">
+          <div class="mt-3 space-y-0.5 px-2.5">
+            <button id="newChat" class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm hover:bg-navy-800">
+              <i data-i="edit" class="h-[18px] w-[18px]"></i> Nuevo chat
+            </button>
+            <label class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-navy-200 focus-within:bg-navy-800 hover:bg-navy-800">
+              <i data-i="search" class="h-[18px] w-[18px]"></i>
+              <input id="search" type="search" placeholder="Buscar chats"
+                     class="w-full bg-transparent text-[#ececec] outline-none placeholder:text-navy-200" />
+            </label>
+          </div>
+
+          <!-- Historial (se dibuja desde JavaScript) -->
+          <nav id="history" class="scroll-thin mt-3 flex-1 overflow-y-auto px-2.5 pb-2" aria-label="Historial de chats"></nav>
+        </div>
+      </div>
+
+      <!-- Perfil de usuario -->
+      <div class="border-t border-white/10 p-2.5">
+        <div class="flex items-center gap-2.5 rounded-lg p-2">
+          <span id="avatar" class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-navy-500 text-xs font-semibold">?</span>
+          <span class="min-w-0 flex-1 leading-tight">
+            <span id="userName" class="block truncate text-sm">Invitado</span>
+            <span id="userSub" class="block truncate text-xs text-navy-200">Sin sesión iniciada</span>
+          </span>
+          <button id="logout" class="hidden rounded-lg p-2 text-navy-200 hover:bg-navy-800" aria-label="Cerrar sesión" title="Cerrar sesión">
+            <i data-i="logout" class="h-5 w-5"></i>
+          </button>
+        </div>
+      </div>
+     </div>
+    </aside>
+
+    <!-- ============ ÁREA PRINCIPAL ============ -->
+    <main class="flex min-w-0 flex-1 flex-col">
+
+      <!-- Encabezado -->
+      <header class="flex items-center justify-between px-2 py-2 md:px-3">
+        <div class="flex items-center gap-1">
+          <!-- Abrir sidebar: visible solo cuando el sidebar está cerrado (lo controla body[data-sb]) -->
+          <button id="openSidebar" class="items-center rounded-lg p-2 text-navy-700 hover:bg-navy-100 dark:text-navy-200 dark:hover:bg-navy-800" aria-label="Abrir barra lateral">
+            <i data-i="menu" class="h-5 w-5"></i>
+          </button>
+          <h2 id="viewTitle" class="px-3 py-2 text-lg font-medium">arpIA</h2>
+        </div>
+        <button id="theme" class="rounded-lg p-2 text-navy-700 hover:bg-navy-100 dark:text-navy-200 dark:hover:bg-navy-800" aria-label="Cambiar tema">
+          <i data-i="sun" class="hidden h-5 w-5 dark:block"></i>
+          <i data-i="moon" class="h-5 w-5 dark:hidden"></i>
+        </button>
+      </header>
+
+      <!-- ============ VISTA: INICIO DE SESIÓN ============ -->
+      <section id="viewLogin" class="scroll-thin hidden flex flex-1 overflow-y-auto px-4 py-8">
+        <!-- m-auto centra el bloque en horizontal y vertical, y permite scroll si la pantalla es muy baja -->
+        <div class="m-auto w-full max-w-sm">
+          <div class="mb-6 text-center">
+            <svg class="logo-mascot mx-auto mb-3 h-20 w-20" viewBox="0 0 20 20" role="img" aria-label="Logo de arpIA"></svg>
+            <h1 class="text-3xl text-navy-800 dark:text-navy-50">arpIA</h1>
+            <p class="mt-2 text-sm italic text-navy-600 dark:text-navy-300">Del aire al espacio, tu copiloto inteligente.</p>
+          </div>
+
+          <p id="loginNotice" role="status" class="mb-4 hidden rounded-xl bg-navy-100 px-3.5 py-2.5 text-sm text-navy-800 dark:bg-navy-800 dark:text-navy-100">
+            Inicia sesión para acceder a esa sección.
+          </p>
+
+          <!-- Paso 1: usuario, contraseña y reCAPTCHA -->
+          <form id="stepCreds" class="space-y-4" novalidate>
+            <h2 class="text-center text-lg">Iniciar sesión</h2>
+            <label class="block text-sm font-medium">Usuario o correo
+              <input id="username" type="text" autocomplete="username" required class="mt-1.5 w-full rounded-xl border border-navy-200 bg-navy-50 px-3.5 py-2.5 text-base font-normal outline-none focus:border-navy-400 focus:ring-2 focus:ring-navy-300/60 dark:border-navy-700 dark:bg-navy-950 dark:focus:ring-navy-600" />
+            </label>
+            <label class="block text-sm font-medium">Contraseña
+              <span class="relative mt-1.5 block">
+                <input id="password" type="password" autocomplete="current-password" required class="w-full rounded-xl border border-navy-200 bg-navy-50 px-3.5 py-2.5 text-base font-normal outline-none focus:border-navy-400 focus:ring-2 focus:ring-navy-300/60 dark:border-navy-700 dark:bg-navy-950 dark:focus:ring-navy-600 pr-11" />
+                <button type="button" id="togglePw" class="absolute inset-y-0 right-1 my-auto flex h-9 w-9 items-center justify-center rounded-lg text-navy-500 hover:bg-navy-100 dark:text-navy-300 dark:hover:bg-navy-800" aria-label="Mostrar contraseña">
+                  <i data-i="eye" class="pw-show h-5 w-5"></i>
+                  <i data-i="eyeoff" class="pw-hide hidden h-5 w-5"></i>
+                </button>
+              </span>
+            </label>
+
+            <div id="recaptcha" class="flex min-h-[78px] items-center justify-center"></div>
+
+            <p id="credsMsg" role="alert" class="hidden text-sm"></p>
+            <button id="credsBtn" type="submit" class="w-full rounded-xl bg-navy-500 py-2.5 font-medium text-white transition hover:bg-navy-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-navy-400 dark:text-navy-950 dark:hover:bg-navy-300">Continuar</button>
+            <p id="demoHint" class="hidden rounded-lg bg-navy-50 p-2.5 text-xs text-navy-700 dark:bg-navy-950 dark:text-navy-200"></p>
+          </form>
+
+          <!-- Paso 2: código de verificación enviado por WhatsApp -->
+          <form id="stepOtp" class="hidden space-y-4" novalidate>
+            <div class="flex items-start gap-3">
+              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy-100 text-navy-600 dark:bg-navy-800 dark:text-navy-200">
+                <i data-i="chat" class="h-5 w-5"></i>
+              </span>
+              <div>
+                <h2 class="font-semibold">Verificación en dos pasos</h2>
+                <p class="mt-0.5 text-sm text-navy-600 dark:text-navy-300">Enviamos un código de 6 dígitos por WhatsApp al <strong id="phoneHint" class="whitespace-nowrap"></strong>.</p>
+              </div>
+            </div>
+
+            <div id="otpBoxes" class="flex justify-between gap-2" role="group" aria-label="Código de verificación"></div>
+
+            <p id="otpMsg" role="alert" class="hidden text-sm"></p>
+            <button id="otpBtn" type="submit" class="w-full rounded-xl bg-navy-500 py-2.5 font-medium text-white transition hover:bg-navy-600 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-navy-400 dark:text-navy-950 dark:hover:bg-navy-300">Verificar y entrar</button>
+            <p id="otpDemo" class="hidden rounded-lg bg-navy-50 p-2.5 text-xs text-navy-700 dark:bg-navy-950 dark:text-navy-200"></p>
+
+            <div class="flex items-center justify-between text-sm">
+              <button type="button" id="otpBack" class="text-navy-600 hover:underline dark:text-navy-300">← Volver</button>
+              <button type="button" id="otpResend" class="font-medium text-navy-600 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60 dark:text-navy-300"></button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- ============ VISTA: DASHBOARD ============ -->
+      <section id="viewDashboard" class="scroll-thin hidden flex-1 overflow-y-auto">
+        <div class="mx-auto w-full max-w-4xl px-4 py-6 md:py-10">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h1 id="dashHello" class="text-2xl font-semibold text-navy-800 dark:text-navy-50"></h1>
+              <p class="mt-1 text-sm text-navy-600 dark:text-navy-300">Resumen de tu actividad con arpIA.</p>
+            </div>
+            <button id="dashGo" class="flex items-center gap-2 rounded-xl bg-navy-500 px-4 py-2 text-sm font-medium text-white hover:bg-navy-600 dark:bg-navy-400 dark:text-navy-950 dark:hover:bg-navy-300">
+              <i data-i="spark" class="h-4 w-4"></i> Abrir arpIA
+            </button>
+          </div>
+
+          <div id="dashStats" class="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4"></div>
+
+          <div class="mt-8 grid gap-6 md:grid-cols-3">
+            <div class="md:col-span-2">
+              <h2 class="font-semibold">Conversaciones recientes</h2>
+              <div id="dashRecent" class="mt-3 space-y-2"></div>
+            </div>
+            <div>
+              <h2 class="font-semibold">Seguridad</h2>
+              <ul class="mt-3 space-y-3 rounded-2xl border border-navy-200 bg-navy-50/60 p-4 text-sm dark:border-navy-800 dark:bg-navy-900">
+                <li class="flex items-start gap-2"><i data-i="shield" class="mt-0.5 h-4 w-4 text-navy-500 dark:text-navy-300"></i> Verificación en dos pasos por WhatsApp</li>
+                <li class="flex items-start gap-2"><i data-i="shield" class="mt-0.5 h-4 w-4 text-navy-500 dark:text-navy-300"></i> reCAPTCHA en el inicio de sesión</li>
+              </ul>
+            </div>
+          </div>
+
+          <p class="mt-8 text-xs text-navy-600 dark:text-navy-300">Vista de ejemplo: muestra los datos de esta sesión y aún no está conectada al backend del Dashboard.</p>
+        </div>
+      </section>
+
+      <!-- ============ VISTA: CHAT arpIA ============ -->
+      <div id="viewChat" class="hidden min-h-0 flex-1 flex flex-col">
+
+      <!-- Zona de mensajes -->
+      <div id="scroller" class="scroll-thin flex-1 overflow-y-auto">
+
+        <!-- Vista inicial: saludo + burbujas de ejemplo -->
+        <section id="welcome" class="flex min-h-full flex-col items-center justify-center px-4 pb-8 text-center">
+          <h1 class="text-2xl font-semibold text-navy-800 dark:text-navy-50 sm:text-3xl">¿En qué puedo ayudarte hoy?</h1>
+          <div id="suggestions" class="mt-8 flex max-w-2xl flex-wrap justify-center gap-2.5"></div>
+        </section>
+
+        <!-- Conversación activa -->
+        <section id="thread" class="mx-auto hidden w-full max-w-3xl space-y-6 px-4 py-6" aria-live="polite"></section>
+      </div>
+
+      <!-- Mascota pixel-art sobre la barra de entrada.
+           Ocupa su propia fila (no flota), así que nunca tapa los mensajes. -->
+      <div class="px-3 md:px-4">
+        <div class="mx-auto flex max-w-3xl items-end">
+          <svg id="mascot" class="pixelart ml-[10px] h-[45px] w-12 shrink-0 cursor-pointer sm:h-[60px] sm:w-16" viewBox="0 0 16 15"
+               shape-rendering="crispEdges" data-state="idle" role="img" tabindex="0"
+               aria-label="arpIA, la mascota. Haz clic para saludar."></svg>
+        </div>
+      </div>
+
+      <!-- Barra de entrada (fija abajo) -->
+      <div class="px-3 pb-2 pt-1 md:px-4" style="padding-bottom: max(0.5rem, env(safe-area-inset-bottom))">
+        <form id="form" class="mx-auto max-w-3xl">
+          <div class="rounded-[26px] bg-navy-50 px-2.5 py-2 transition-shadow focus-within:ring-2 focus-within:ring-navy-300/70 dark:bg-navy-900 dark:focus-within:ring-navy-600">
+
+            <!-- Chip del archivo adjunto (simulado) -->
+            <div id="chip" class="mb-1 hidden px-1">
+              <span class="inline-flex max-w-full items-center gap-2 rounded-xl bg-black/5 py-1.5 pl-3 pr-2 text-sm dark:bg-white/10">
+                <i data-i="file" class="h-4 w-4 shrink-0"></i>
+                <span id="chipName" class="truncate"></span>
+                <button type="button" id="chipRemove" class="rounded-full p-0.5 hover:bg-black/10 dark:hover:bg-white/10" aria-label="Quitar archivo">
+                  <i data-i="x" class="h-4 w-4"></i>
+                </button>
+              </span>
+            </div>
+
+            <div class="flex items-end gap-1">
+              <!-- Adjuntar archivo -->
+              <input id="file" type="file" class="hidden" />
+              <button type="button" id="attach" class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10" aria-label="Adjuntar archivo">
+                <i data-i="plus" class="h-5 w-5"></i>
+              </button>
+
+              <!-- Cuadro de texto adaptable -->
+              <textarea id="input" rows="1" placeholder="Pregunta lo que quieras"
+                        class="scroll-thin max-h-52 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-base leading-6 outline-none placeholder:text-navy-500 dark:placeholder:text-navy-300"></textarea>
+
+              <!-- Modo voz (simulado) -->
+              <button type="button" id="voice" class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10" aria-label="Modo voz" aria-pressed="false">
+                <i data-i="mic" class="h-5 w-5"></i>
+              </button>
+
+              <!-- Enviar -->
+              <button type="submit" id="send" disabled aria-label="Enviar mensaje"
+                      class="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy-500 text-white transition hover:bg-navy-600 disabled:cursor-not-allowed disabled:opacity-30 dark:bg-navy-400 dark:text-navy-950 dark:hover:bg-navy-300">
+                <i data-i="send" class="h-5 w-5"></i>
+              </button>
+            </div>
+          </div>
+        </form>
+        <p class="mx-auto mt-2 max-w-3xl text-center text-xs text-navy-600 dark:text-navy-300">
+          arpIA puede cometer errores. Verifica la información importante.
+        </p>
+      </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    /* =====================================================================
+       1. ICONOS — reemplaza <i data-i="nombre"> por un <svg> del sprite
+       ===================================================================== */
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    function hydrateIcons(root = document) {
+      root.querySelectorAll('[data-i]').forEach((el) => {
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        svg.setAttribute('class', el.getAttribute('class') + ' shrink-0');
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('stroke-width', '2');
+        svg.setAttribute('stroke-linecap', 'round');
+        svg.setAttribute('stroke-linejoin', 'round');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.innerHTML = `<use href="#i-${el.dataset.i}"/>`;
+        el.replaceWith(svg);
+      });
+    }
+
+    /* =====================================================================
+       2. DATOS Y ESTADO
+       ===================================================================== */
+    const $ = (id) => document.getElementById(id);
+
+    // Ejemplos para iniciar la conversación
+    const SUGGESTIONS = [
+      { icon: 'bulb',    text: 'Dame ideas para un proyecto' },
+      { icon: 'code',    text: 'Explícame qué es una API' },
+      { icon: 'edit',    text: 'Ayúdame a redactar un correo' },
+      { icon: 'compass', text: 'Planea un viaje de fin de semana' },
+    ];
+
+    // Respuestas de cortesía simuladas (se elige una al azar)
+    const COURTESY = [
+      '¡Gracias por tu mensaje! Con gusto te ayudo. Esta es una respuesta simulada: conecta tu backend para obtener respuestas reales.',
+      '¡Buena pregunta! Ahora mismo respondo con un texto predefinido, pero la interfaz ya está lista para integrarse con un modelo real.',
+      'Entendido. Estoy en modo demostración, así que solo puedo devolverte un eco amable de lo que escribiste. ¿Algo más en lo que pueda ayudarte?',
+    ];
+
+    // Historial de ejemplo. Los chats nuevos se agregan al grupo "Hoy".
+    const chats = {
+      c1: { group: 'Ayer', title: 'Ideas para un proyecto de curso', messages: [
+        { role: 'user', text: '¿Qué proyecto puedo hacer para mi curso de programación?' },
+        { role: 'ai',   text: 'Podrías construir una app de tareas con etiquetas, un chatbot sencillo o un visualizador de datos abiertos. ¿Cuál te llama más la atención?' } ] },
+      c2: { group: 'Ayer', title: 'Diferencia entre HTTP y HTTPS', messages: [
+        { role: 'user', text: '¿Cuál es la diferencia entre HTTP y HTTPS?' },
+        { role: 'ai',   text: 'HTTPS es HTTP sobre una conexión cifrada con TLS: protege la confidencialidad e integridad de los datos entre el navegador y el servidor.' } ] },
+      c3: { group: 'Últimos 7 días', title: 'Receta de arepas', messages: [
+        { role: 'user', text: '¿Cómo preparo arepas de maíz?' },
+        { role: 'ai',   text: 'Mezcla harina de maíz precocida con agua tibia y sal, amasa hasta obtener una masa suave, forma discos y cocínalos en un sartén caliente unos 5 minutos por lado.' } ] },
+      c4: { group: 'Últimos 7 días', title: 'Resumen de un artículo', messages: [
+        { role: 'user', text: 'Resume en tres puntos las ventajas del trabajo en equipo.' },
+        { role: 'ai',   text: '1. Se combinan habilidades distintas.\n2. Se reparte la carga de trabajo.\n3. Se detectan errores antes gracias a la revisión mutua.' } ] },
+    };
+    const GROUP_ORDER = ['Hoy', 'Ayer', 'Últimos 7 días'];
+
+    const SAMPLE_CHAT_IDS = new Set(Object.keys(chats)); // los demás se borran al cerrar sesión
+
+    let user = null;       // usuario con sesión iniciada (null = invitado)
+    let view = 'login';    // 'login' | 'dashboard' | 'chat'
+    let activeId = null;   // null = chat nuevo (aún sin mensajes)
+    let busy = false;      // true mientras la IA "responde"
+    let attached = null;   // archivo adjunto simulado
+
+    /* =====================================================================
+       3. SIDEBAR (colapsable en escritorio, deslizable en móvil)
+       ===================================================================== */
+    const sidebar = $('sidebar'), overlay = $('overlay'), openBtn = $('openSidebar');
+    const desktopMQ = window.matchMedia('(min-width: 768px)');
+    const isDesktop = () => desktopMQ.matches;
+
+    // Todo el estado vive en body[data-sb]; el CSS hace el resto
+    function setSidebar(open) {
+      document.body.dataset.sb = open ? 'open' : 'closed';
+      openBtn.setAttribute('aria-expanded', open);
+    }
+    const openSidebar = () => setSidebar(true);
+    const closeSidebar = () => setSidebar(false);
+    openBtn.addEventListener('click', openSidebar);
+    $('closeSidebar').addEventListener('click', closeSidebar);
+    overlay.addEventListener('click', closeSidebar);
+    // Al cambiar entre móvil y escritorio: abierto en escritorio, cerrado en móvil
+    desktopMQ.addEventListener('change', (e) => setSidebar(e.matches));
+
+    /* =====================================================================
+       3b. MASCOTA PIXEL-ART — el sprite se dibuja desde un mapa de caracteres
+       ===================================================================== */
+    const SPRITE = [            // B cuerpo · D contorno · L brillo · Y punta de la antena
+      '................',
+      '.......YY.......',
+      '.......DD.......',
+      '...DDDDDDDDDD...',
+      '..DBBBBBBBBBBD..',
+      '..DBLLBBBBBBBD..',
+      '..DBBBBBBBBBBD..',
+      '..DBBBBBBBBBBD..',
+      '.DDBBBBBBBBBBDD.',
+      '.DBBBBBBBBBBBBD.',
+      '.DBBBBBBBBBBBBD.',
+      '..DDBBBBBBBBDD..',
+      '...DDDDDDDDDD...',
+      '...DBBD..DBBD...',
+      '...DDDD..DDDD...',
+    ];
+    const PALETTE = { B: '#7b96c9', D: '#2b3d61', L: '#c5d2e8', Y: '#f5c842' };
+    const INK = '#16203a', WHITE = '#ffffff';
+    const R = (x, y, w, h, fill) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}"/>`;
+
+    // Dibuja el sprite (sin cara). `animated` hace parpadear la antena; el logo la deja fija.
+    function spriteBody(animated = true) {
+      let body = '';
+      SPRITE.forEach((row, y) => {
+        // Une píxeles contiguos del mismo color en un solo rectángulo
+        for (let x = 0; x < row.length; ) {
+          const c = row[x]; let n = 1;
+          while (row[x + n] === c) n++;
+          if (PALETTE[c]) body += c === 'Y' && animated ? `<g class="px-tip">${R(x, y, n, 1, PALETTE[c])}</g>` : R(x, y, n, 1, PALETTE[c]);
+          x += n;
+        }
+      });
+      return body;
+    }
+
+    // Logo circular: la mascota (cara fija) sobre un círculo claro. Se usa en el login y en el sidebar.
+    function drawLogos() {
+      const face = R(5, 6, 2, 2, INK) + R(9, 6, 2, 2, INK) + R(5, 6, 1, 1, WHITE) + R(9, 6, 1, 1, WHITE) + R(7, 9, 2, 1, INK);
+      const logo = `<circle cx="10" cy="10" r="9.75" fill="#e1e8f4" stroke="#7b96c9" stroke-width=".5"/>
+        <g shape-rendering="crispEdges" transform="translate(2 2.5)">${spriteBody(false)}${face}</g>`;
+      document.querySelectorAll('.logo-mascot').forEach((el) => { el.innerHTML = logo; });
+    }
+
+    function drawMascot() {
+      const body = spriteBody();
+      const eyesOpen   = R(5, 6, 2, 2, INK) + R(9, 6, 2, 2, INK) + R(5, 6, 1, 1, WHITE) + R(9, 6, 1, 1, WHITE);
+      const eyesClosed = R(5, 7, 2, 1, INK) + R(9, 7, 2, 1, INK);
+      const eyesUp     = R(6, 5, 2, 2, INK) + R(10, 5, 2, 2, INK);
+      $('mascot').innerHTML =
+        `<g class="px-hop"><g class="px-bob">${body}
+          <g class="px-eyes-open">${eyesOpen}</g>
+          <g class="px-eyes-closed">${eyesClosed}</g>
+          <g class="px-eyes-up">${eyesUp}</g>
+          <g class="px-mouth-closed">${R(7, 9, 2, 1, INK)}</g>
+          <g class="px-mouth-open">${R(7, 9, 2, 2, INK)}</g>
+        </g></g>`;
+    }
+
+    // La mascota solo cambia de animación según el estado (idle / thinking / talking); no muestra texto
+    function setMascot(state) { $('mascot').dataset.state = state; }
+    // Salto de saludo (reinicia la animación aunque ya esté corriendo)
+    function hopMascot() {
+      const hop = $('mascot').querySelector('.px-hop');
+      hop.style.animation = 'none';
+      void hop.getBoundingClientRect();
+      hop.style.animation = '';
+    }
+    $('mascot').addEventListener('click', hopMascot);
+    $('mascot').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('mascot').click(); }
+    });
+
+    /* =====================================================================
+       4. HISTORIAL
+       ===================================================================== */
+    function renderHistory() {
+      const q = $('search').value.trim().toLowerCase();
+      const nav = $('history');
+      nav.replaceChildren();
+
+      GROUP_ORDER.forEach((group) => {
+        const items = Object.entries(chats).filter(([, c]) => c.group === group && c.title.toLowerCase().includes(q));
+        if (!items.length) return;
+
+        const h = document.createElement('div');
+        h.className = 'px-2.5 pb-1 pt-3 text-xs font-medium text-navy-300';
+        h.textContent = group;
+        nav.appendChild(h);
+
+        items.reverse().forEach(([id, chat]) => { // más recientes primero
+          const b = document.createElement('button');
+          b.className = 'block w-full truncate rounded-lg px-2.5 py-2 text-left text-sm hover:bg-navy-800 ' +
+                        (id === activeId ? 'bg-navy-800' : '');
+          b.textContent = chat.title; // textContent: nunca HTML del usuario
+          b.addEventListener('click', () => openChat(id));
+          nav.appendChild(b);
+        });
+      });
+    }
+    $('search').addEventListener('input', renderHistory);
+
+    /* =====================================================================
+       5. MENSAJES
+       ===================================================================== */
+    const thread = $('thread'), welcome = $('welcome'), scroller = $('scroller');
+    const scrollDown = () => { scroller.scrollTop = scroller.scrollHeight; };
+
+    function showThread(show) {
+      thread.classList.toggle('hidden', !show);
+      welcome.classList.toggle('hidden', show);
+    }
+
+    // Mensaje del usuario: burbuja a la derecha
+    function addUserMessage(text) {
+      const row = document.createElement('div');
+      row.className = 'rise flex justify-end';
+      const bubble = document.createElement('div');
+      bubble.className = 'max-w-[85%] whitespace-pre-wrap break-words rounded-3xl bg-navy-100 px-5 py-2.5 dark:bg-navy-800 md:max-w-[75%]';
+      bubble.textContent = text;
+      row.appendChild(bubble);
+      thread.appendChild(row);
+      scrollDown();
+    }
+
+    // Mensaje de la IA: icono a la izquierda + texto limpio (sin burbuja).
+    // Devuelve { body, actions } para poder escribir el texto después.
+    function addAIMessage() {
+      const row = document.createElement('div');
+      row.className = 'rise flex gap-3';
+      row.innerHTML = `
+        <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-navy-200 text-navy-500 dark:border-navy-700 dark:text-navy-300">
+          <i data-i="spark" class="h-4 w-4"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div data-body class="whitespace-pre-wrap break-words leading-7"></div>
+          <div data-actions class="mt-1 hidden gap-1 text-navy-500 dark:text-navy-300">
+            <button data-act="copy" class="rounded-lg p-1.5 hover:bg-navy-100 dark:hover:bg-navy-800" aria-label="Copiar"><i data-i="copy" class="h-4 w-4"></i></button>
+          </div>
+        </div>`;
+      hydrateIcons(row);
+      thread.appendChild(row);
+      scrollDown();
+
+      const body = row.querySelector('[data-body]');
+      const actions = row.querySelector('[data-actions]');
+
+      // Acción disponible: copiar la respuesta
+      actions.addEventListener('click', async (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        try { await navigator.clipboard.writeText(body.textContent); } catch {}
+        btn.classList.add('text-navy-800', 'dark:text-white');
+        setTimeout(() => btn.classList.remove('text-navy-800', 'dark:text-white'), 1200);
+      });
+      return { body, actions };
+    }
+
+    // Puntos animados "escribiendo…"
+    function showTyping(body) {
+      body.innerHTML = '<span class="inline-flex items-center gap-1 py-2" aria-label="Escribiendo">' +
+        [0, 150, 300].map((d) => `<i class="h-2 w-2 animate-bounce rounded-full bg-navy-400" style="animation-delay:${d}ms"></i>`).join('') +
+        '</span>';
+    }
+
+    // Escribe el texto palabra por palabra
+    function streamText(body, text, done) {
+      const parts = text.split(/(\s+)/);
+      let i = 0;
+      body.textContent = '';
+      (function tick() {
+        if (i >= parts.length) return done();
+        body.textContent += parts[i++];
+        scrollDown();
+        setTimeout(tick, 22);
+      })();
+    }
+
+    /* =====================================================================
+       6. FLUJO DE ENVÍO
+       ===================================================================== */
+    function openChat(id) {
+      activeId = id;
+      thread.replaceChildren();
+      const msgs = chats[id].messages;
+      showThread(msgs.length > 0);
+      msgs.forEach((m) => {
+        if (m.role === 'user') return addUserMessage(m.text);
+        const { body, actions } = addAIMessage();
+        body.textContent = m.text;
+        actions.classList.replace('hidden', 'flex');
+      });
+      renderHistory();
+      go('chat');
+    }
+
+    function newChat() {
+      activeId = null;
+      thread.replaceChildren();
+      showThread(false);
+      renderHistory();
+      go('chat');
+      if (isDesktop()) input.focus();
+      hopMascot();
+    }
+    $('newChat').addEventListener('click', newChat);
+
+    function send(text) {
+      text = (text ?? input.value).trim();
+      if (!user || (!text && !attached) || busy) return;
+
+      // Texto final del mensaje (incluye el nombre del adjunto simulado)
+      const fileName = attached?.name;
+      const shown = [fileName && `📎 ${fileName}`, text].filter(Boolean).join('\n');
+
+      // Crea el chat en el historial al enviar el primer mensaje
+      if (!activeId) {
+        activeId = 'c' + Date.now();
+        chats[activeId] = { group: 'Hoy', title: (text || fileName).slice(0, 60), messages: [] };
+        renderHistory();
+      }
+      const chatId = activeId;
+      chats[chatId].messages.push({ role: 'user', text: shown });
+      showThread(true);
+      addUserMessage(shown);
+
+      input.value = '';
+      clearAttachment();
+      autosize();
+
+      // La IA responde tras 1 segundo, mostrando antes los puntos "escribiendo…"
+      busy = true;
+      setMascot('thinking');
+      const { body, actions } = addAIMessage();
+      showTyping(body);
+      setTimeout(() => {
+        if (!user || !chats[chatId]) { busy = false; return; } // se cerró la sesión mientras respondía
+        const reply = `Dijiste: «${text || fileName}»\n\n` + COURTESY[Math.floor(Math.random() * COURTESY.length)];
+        chats[chatId].messages.push({ role: 'ai', text: reply });
+        setMascot('talking');
+        streamText(body, reply, () => {
+          actions.classList.replace('hidden', 'flex');
+          setMascot('idle');
+          busy = false;
+          updateSend();
+        });
+      }, 1000);
+    }
+
+    /* =====================================================================
+       7. BARRA DE ENTRADA
+       ===================================================================== */
+    const input = $('input'), sendBtn = $('send'), form = $('form');
+
+    function autosize() {
+      input.style.height = 'auto';
+      input.style.height = Math.min(input.scrollHeight, 208) + 'px';
+      updateSend();
+    }
+    function updateSend() { sendBtn.disabled = busy || (!input.value.trim() && !attached); }
+
+    input.addEventListener('input', autosize);
+    input.addEventListener('keydown', (e) => {
+      // Enter envía; Shift+Enter agrega salto de línea
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
+    });
+    form.addEventListener('submit', (e) => { e.preventDefault(); send(); });
+
+    // Adjuntar archivo (solo muestra el chip; no se sube nada)
+    $('attach').addEventListener('click', () => $('file').click());
+    $('file').addEventListener('change', (e) => {
+      attached = e.target.files[0] || null;
+      if (attached) { $('chipName').textContent = attached.name; $('chip').classList.remove('hidden'); }
+      updateSend();
+    });
+    function clearAttachment() {
+      attached = null; $('file').value = ''; $('chip').classList.add('hidden'); updateSend();
+    }
+    $('chipRemove').addEventListener('click', clearAttachment);
+
+    // Modo voz (simulado): alterna un estado "escuchando"
+    $('voice').addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      const on = btn.getAttribute('aria-pressed') !== 'true';
+      btn.setAttribute('aria-pressed', on);
+      btn.classList.toggle('bg-red-500/20', on);
+      btn.classList.toggle('text-red-500', on);
+      btn.classList.toggle('animate-pulse', on);
+      input.placeholder = on ? 'Escuchando…' : 'Pregunta lo que quieras';
+    });
+
+    /* =====================================================================
+       8. TEMA CLARO / OSCURO
+       ===================================================================== */
+    function applyTheme(t) { document.documentElement.classList.toggle('dark', t === 'dark'); }
+    let theme = 'dark';
+    try { theme = localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'); } catch {}
+    applyTheme(theme);
+    $('theme').addEventListener('click', () => {
+      theme = document.documentElement.classList.contains('dark') ? 'light' : 'dark';
+      applyTheme(theme);
+      try { localStorage.setItem('theme', theme); } catch {}
+      // El reCAPTCHA no cambia de tema en caliente: se redibuja si aún no se resolvió
+      if (view === 'login' && !captchaToken && !$('stepCreds').classList.contains('hidden')) renderCaptcha();
+    });
+
+    /* =====================================================================
+       9. AUTENTICACIÓN — usuario + contraseña + reCAPTCHA, y código por WhatsApp
+       ===================================================================== */
+    const AUTH_CONFIG = {
+      // null = MODO DEMOSTRACIÓN: todo se simula en el navegador y NO es seguro.
+      // En producción: URL base del backend, p. ej. 'https://api.tu-dominio.com'.
+      apiBase: null,
+      // Clave PÚBLICA de reCAPTCHA v2. Esta es la clave de pruebas de Google (siempre pasa);
+      // reemplázala por la tuya. La clave SECRETA vive solo en el backend.
+      recaptchaSiteKey: '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+      otpLength: 6,
+      resendSeconds: 30,
+    };
+
+    /* Contrato esperado del backend (JSON; la sesión va en una cookie HttpOnly):
+         POST /auth/login   { username, password, recaptchaToken } -> { challengeId, phoneHint }
+         POST /auth/verify  { challengeId, code }                  -> { user: { name, username } }
+         POST /auth/resend  { challengeId }                        -> { phoneHint }
+         GET  /auth/me                                             -> { user }   (401 si no hay sesión)
+         POST /auth/logout                                         -> 204
+       Errores: HTTP 4xx con { error: 'invalid_credentials' | 'captcha_failed' | 'invalid_code'
+                                     | 'expired' | 'too_many_attempts' | 'rate_limited' }
+       El backend debe validar el token de reCAPTCHA con su clave secreta (siteverify), comprobar
+       la contraseña, generar el código, enviarlo por WhatsApp (WhatsApp Business API / Twilio),
+       hacerlo expirar y limitar los intentos. Nada de esto se puede hacer de forma segura en el navegador. */
+
+    class AuthError extends Error { constructor(code) { super(code); this.code = code; } }
+    const AUTH_MESSAGES = {
+      invalid_credentials: 'Usuario o contraseña incorrectos.',
+      captcha_failed: 'No pudimos verificar el reCAPTCHA. Inténtalo de nuevo.',
+      invalid_code: 'El código no es correcto.',
+      expired: 'El código expiró. Solicita uno nuevo.',
+      too_many_attempts: 'Demasiados intentos. Vuelve a iniciar sesión.',
+      rate_limited: 'Demasiados intentos. Espera unos minutos.',
+      network: 'No pudimos conectar con el servidor.',
+      unauthorized: 'Tu sesión expiró. Inicia sesión de nuevo.',
+      server: 'Ocurrió un error. Inténtalo de nuevo.',
+    };
+    const authMessage = (err) => AUTH_MESSAGES[err?.code] || AUTH_MESSAGES.server;
+
+    // ---- Cliente HTTP real ----
+    async function request(method, path, body) {
+      let res;
+      try {
+        res = await fetch(AUTH_CONFIG.apiBase + path, {
+          method, credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+      } catch { throw new AuthError('network'); }
+      const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+      if (!res.ok) throw new AuthError(data.error || (res.status === 401 ? 'unauthorized' : 'server'));
+      return data;
+    }
+
+    // ---- Simulación local (solo demostración) ----
+    const DEMO = { username: 'demo', password: 'demo1234', code: '123456', name: 'Usuario Demo', phone: '+57 ••• ••• 4567' };
+    const demoState = { attempts: 0 };
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const demoSession = {
+      load() { try { return JSON.parse(sessionStorage.getItem('arpia_demo_user')); } catch { return null; } },
+      save(u) { try { sessionStorage.setItem('arpia_demo_user', JSON.stringify(u)); } catch {} },
+      clear() { try { sessionStorage.removeItem('arpia_demo_user'); } catch {} },
+    };
+    const mockApi = {
+      async login({ username, password, recaptchaToken }) {
+        await wait(700);
+        if (!recaptchaToken) throw new AuthError('captcha_failed');
+        if (username.toLowerCase() !== DEMO.username || password !== DEMO.password) throw new AuthError('invalid_credentials');
+        demoState.attempts = 0;
+        return { challengeId: 'demo-challenge', phoneHint: DEMO.phone };
+      },
+      async verify({ code }) {
+        await wait(600);
+        if (code !== DEMO.code) throw new AuthError(++demoState.attempts >= 5 ? 'too_many_attempts' : 'invalid_code');
+        const u = { name: DEMO.name, username: DEMO.username, since: Date.now() };
+        demoSession.save(u);
+        return { user: u };
+      },
+      async resend() { await wait(500); return { phoneHint: DEMO.phone }; },
+      async me() { return { user: demoSession.load() }; },
+      async logout() { demoSession.clear(); },
+    };
+
+    const live = () => Boolean(AUTH_CONFIG.apiBase);
+    const authApi = {
+      login:  (p) => (live() ? request('POST', '/auth/login', p)  : mockApi.login(p)),
+      verify: (p) => (live() ? request('POST', '/auth/verify', p) : mockApi.verify(p)),
+      resend: (p) => (live() ? request('POST', '/auth/resend', p) : mockApi.resend(p)),
+      me:     ()  => (live() ? request('GET',  '/auth/me')        : mockApi.me()),
+      logout: ()  => (live() ? request('POST', '/auth/logout')    : mockApi.logout()),
+    };
+
+    // ---- Utilidades de formulario ----
+    function showMsg(id, text, kind = 'error') {
+      const el = $(id), err = kind === 'error';
+      el.textContent = text;
+      el.classList.remove('hidden');
+      el.classList.toggle('text-red-600', err);
+      el.classList.toggle('dark:text-red-400', err);
+      el.classList.toggle('text-navy-600', !err);
+      el.classList.toggle('dark:text-navy-300', !err);
+    }
+    const hideMsg = (id) => $(id).classList.add('hidden');
+    function setLoading(btn, on, label) {
+      if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+      btn.disabled = on;
+      btn.textContent = on ? label : btn.dataset.label;
+    }
+
+    // ---- reCAPTCHA ----
+    let captchaToken = null, captchaWidget = null, captchaTimer = null;
+    const isDark = () => document.documentElement.classList.contains('dark');
+
+    function renderCaptcha() {
+      const box = $('recaptcha');
+      captchaToken = null; captchaWidget = null;
+      clearTimeout(captchaTimer);
+      if (!window.recaptchaReady) {
+        box.innerHTML = '<p class="text-sm text-navy-600 dark:text-navy-300">Cargando reCAPTCHA…</p>';
+        captchaTimer = setTimeout(() => {
+          if (!window.recaptchaReady) box.innerHTML = '<p class="text-center text-sm text-red-600 dark:text-red-400">No se pudo cargar reCAPTCHA. Revisa tu conexión y recarga la página.</p>';
+        }, 10000);
+        return;
+      }
+      box.replaceChildren();
+      const holder = document.createElement('div');
+      box.appendChild(holder);
+      captchaWidget = grecaptcha.render(holder, {
+        sitekey: AUTH_CONFIG.recaptchaSiteKey,
+        theme: isDark() ? 'dark' : 'light',
+        callback: (t) => { captchaToken = t; hideMsg('credsMsg'); },
+        'expired-callback': () => { captchaToken = null; },
+        'error-callback': () => { captchaToken = null; showMsg('credsMsg', AUTH_MESSAGES.captcha_failed); },
+      });
+    }
+    // Los tokens de reCAPTCHA son de un solo uso: tras cada intento se reinicia el widget
+    function resetCaptcha() {
+      captchaToken = null;
+      if (window.recaptchaReady && captchaWidget !== null) grecaptcha.reset(captchaWidget);
+    }
+    window.addEventListener('recaptcha-ready', () => {
+      if (view === 'login' && !$('stepCreds').classList.contains('hidden')) renderCaptcha();
+    });
+
+    // ---- Paso 1: credenciales ----
+    let challenge = null;
+
+    function showCredsStep(message) {
+      clearInterval(resendTimer);
+      challenge = null;
+      $('stepOtp').classList.add('hidden');
+      $('stepCreds').classList.remove('hidden');
+      hideMsg('credsMsg');
+      if (message) showMsg('credsMsg', message);
+      renderCaptcha();
+    }
+
+    $('togglePw').addEventListener('click', () => {
+      const show = $('password').type === 'password';
+      $('password').type = show ? 'text' : 'password';
+      $('togglePw').setAttribute('aria-label', show ? 'Ocultar contraseña' : 'Mostrar contraseña');
+      $('togglePw').querySelector('.pw-show').classList.toggle('hidden', show);
+      $('togglePw').querySelector('.pw-hide').classList.toggle('hidden', !show);
+    });
+
+    $('stepCreds').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideMsg('credsMsg');
+      const username = $('username').value.trim(), password = $('password').value;
+      if (!username || !password) return showMsg('credsMsg', 'Ingresa tu usuario y tu contraseña.');
+      if (!captchaToken) return showMsg('credsMsg', 'Confirma que no eres un robot.');
+
+      setLoading($('credsBtn'), true, 'Verificando…');
+      try {
+        challenge = await authApi.login({ username, password, recaptchaToken: captchaToken });
+        $('password').value = '';
+        showOtpStep(challenge.phoneHint);
+      } catch (err) {
+        showMsg('credsMsg', authMessage(err));
+      } finally {
+        setLoading($('credsBtn'), false);
+        resetCaptcha();
+      }
+    });
+
+    // ---- Paso 2: código de WhatsApp ----
+    let resendTimer = null;
+    const otpBoxes = [];
+    for (let i = 0; i < AUTH_CONFIG.otpLength; i++) {
+      const box = document.createElement('input');
+      box.type = 'text'; box.inputMode = 'numeric';
+      box.autocomplete = i === 0 ? 'one-time-code' : 'off';
+      box.setAttribute('aria-label', `Dígito ${i + 1} de ${AUTH_CONFIG.otpLength}`);
+      box.className = 'h-12 w-full min-w-0 rounded-xl border border-navy-200 bg-navy-50 text-center text-xl font-semibold outline-none focus:border-navy-400 focus:ring-2 focus:ring-navy-300/60 dark:border-navy-700 dark:bg-navy-950 dark:focus:ring-navy-600';
+      box.addEventListener('input', () => fillOtp(i, box.value));
+      box.addEventListener('keydown', (e) => {
+        if (e.key === 'Backspace' && !box.value && i > 0) { otpBoxes[i - 1].value = ''; otpBoxes[i - 1].focus(); }
+        if (e.key === 'ArrowLeft' && i > 0) otpBoxes[i - 1].focus();
+        if (e.key === 'ArrowRight' && i < otpBoxes.length - 1) otpBoxes[i + 1].focus();
+      });
+      box.addEventListener('paste', (e) => {
+        e.preventDefault();
+        fillOtp(i, (e.clipboardData || window.clipboardData).getData('text'));
+      });
+      otpBoxes.push(box);
+      $('otpBoxes').appendChild(box);
+    }
+    const otpCode = () => otpBoxes.map((b) => b.value).join('');
+    const clearOtp = () => { otpBoxes.forEach((b) => (b.value = '')); otpBoxes[0].focus(); };
+
+    // Reparte los dígitos escritos o pegados (desde la casilla `from`) y envía al completar
+    function fillOtp(from, raw) {
+      const digits = raw.replace(/\D/g, '');
+      if (!digits) { otpBoxes[from].value = ''; return; }
+      [...digits].slice(0, otpBoxes.length - from).forEach((d, k) => { otpBoxes[from + k].value = d; });
+      const next = Math.min(from + digits.length, otpBoxes.length - 1);
+      otpBoxes[next].focus();
+      if (otpCode().length === otpBoxes.length) $('stepOtp').requestSubmit();
+    }
+
+    function showOtpStep(phoneHint) {
+      $('stepCreds').classList.add('hidden');
+      $('stepOtp').classList.remove('hidden');
+      $('phoneHint').textContent = phoneHint;
+      hideMsg('otpMsg');
+      $('otpDemo').classList.toggle('hidden', live());
+      $('otpDemo').textContent = `Modo demostración: el código es ${DEMO.code}. No se envía ningún WhatsApp real.`;
+      clearOtp();
+      startResendTimer();
+    }
+
+    function startResendTimer() {
+      clearInterval(resendTimer);
+      let left = AUTH_CONFIG.resendSeconds;
+      const btn = $('otpResend');
+      const paint = () => { btn.disabled = left > 0; btn.textContent = left > 0 ? `Reenviar código (${left}s)` : 'Reenviar código'; };
+      paint();
+      resendTimer = setInterval(() => { left--; paint(); if (left <= 0) clearInterval(resendTimer); }, 1000);
+    }
+
+    $('otpResend').addEventListener('click', async () => {
+      try {
+        const r = await authApi.resend({ challengeId: challenge.challengeId });
+        if (r.phoneHint) $('phoneHint').textContent = r.phoneHint;
+        showMsg('otpMsg', 'Enviamos un nuevo código a tu WhatsApp.', 'info');
+        clearOtp();
+        startResendTimer();
+      } catch (err) { showMsg('otpMsg', authMessage(err)); }
+    });
+    $('otpBack').addEventListener('click', () => showCredsStep());
+
+    $('stepOtp').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if ($('otpBtn').disabled) return; // evita doble envío
+      const code = otpCode();
+      if (code.length < otpBoxes.length) return showMsg('otpMsg', `Ingresa los ${otpBoxes.length} dígitos.`);
+
+      hideMsg('otpMsg');
+      setLoading($('otpBtn'), true, 'Verificando…');
+      try {
+        const res = await authApi.verify({ challengeId: challenge.challengeId, code });
+        onLoggedIn(res.user);
+      } catch (err) {
+        if (err.code === 'too_many_attempts') showCredsStep(authMessage(err));
+        else { showMsg('otpMsg', authMessage(err)); clearOtp(); }
+      } finally {
+        setLoading($('otpBtn'), false);
+      }
+    });
+
+    // ---- Sesión ----
+    function onLoggedIn(u) {
+      user = u;
+      clearInterval(resendTimer);
+      challenge = null;
+      $('username').value = ''; $('password').value = '';
+      updateAuthUI();
+      go('chat');
+      hopMascot();
+    }
+
+    async function logout() {
+      try { await authApi.logout(); } catch {}
+      user = null; busy = false;
+      // Los chats creados en esta sesión no deben verlos otras personas
+      Object.keys(chats).forEach((id) => { if (!SAMPLE_CHAT_IDS.has(id)) delete chats[id]; });
+      activeId = null;
+      thread.replaceChildren();
+      showThread(false);
+      renderHistory();
+      updateAuthUI();
+      go('login');
+      showCredsStep();
+    }
+    $('logout').addEventListener('click', logout);
+
+    /* =====================================================================
+       10. NAVEGACIÓN Y DASHBOARD
+       ===================================================================== */
+    const VIEW_TITLES = { login: 'Iniciar sesión', dashboard: 'Dashboard', chat: 'arpIA' };
+
+    // Cambia de vista. Sin sesión, todo lo que no sea el login redirige al login.
+    function go(next, { notice = false } = {}) {
+      if (!user && next !== 'login') { next = 'login'; notice = true; }
+      if (user && next === 'login') next = 'chat';
+      view = next;
+
+      $('viewLogin').classList.toggle('hidden', next !== 'login');
+      $('viewDashboard').classList.toggle('hidden', next !== 'dashboard');
+      $('viewChat').classList.toggle('hidden', next !== 'chat');
+      $('loginNotice').classList.toggle('hidden', !(next === 'login' && notice));
+      $('viewTitle').textContent = VIEW_TITLES[next];
+      document.title = next === 'chat' ? 'arpIA' : `${VIEW_TITLES[next]} · arpIA`;
+      document.querySelectorAll('[data-nav]').forEach((b) => {
+        const on = b.dataset.nav === next;
+        b.classList.toggle('bg-navy-800', on);
+        on ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current');
+      });
+
+      if (next === 'dashboard') renderDashboard();
+      if (next === 'chat' && isDesktop()) input.focus();
+      if (next === 'login') {
+        $('demoHint').classList.toggle('hidden', live());
+        $('demoHint').textContent = `Modo demostración: usuario "${DEMO.username}" y contraseña "${DEMO.password}". No es seguro para producción.`;
+        if (captchaWidget === null && !$('stepCreds').classList.contains('hidden')) renderCaptcha();
+        if (isDesktop()) ($('stepCreds').classList.contains('hidden') ? otpBoxes[0] : $('username')).focus();
+      }
+      if (!isDesktop()) closeSidebar();
+    }
+
+    // Refleja en el sidebar si hay sesión o no
+    function updateAuthUI() {
+      const on = Boolean(user);
+      $('signinNotice').classList.toggle('hidden', on);
+      $('chatTools').classList.toggle('hidden', !on);
+      $('logout').classList.toggle('hidden', !on);
+      document.querySelectorAll('.lock-icon').forEach((i) => i.classList.toggle('hidden', on));
+      $('userName').textContent = on ? user.name : 'Invitado';
+      $('userSub').textContent = on ? (user.username || 'Sesión iniciada') : 'Sin sesión iniciada';
+      $('avatar').textContent = on ? (user.name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?') : '?';
+    }
+
+    document.querySelectorAll('[data-nav]').forEach((b) => b.addEventListener('click', () => go(b.dataset.nav)));
+    $('signinBtn').addEventListener('click', () => go('login'));
+    $('dashGo').addEventListener('click', () => go('chat'));
+
+    function renderDashboard() {
+      const all = Object.values(chats);
+      const total = all.reduce((n, c) => n + c.messages.length, 0);
+      const mine = all.reduce((n, c) => n + c.messages.filter((m) => m.role === 'user').length, 0);
+      const since = user.since ? new Date(user.since).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) : '—';
+      $('dashHello').textContent = `Hola, ${user.name.split(/\s+/)[0]}`;
+
+      const stats = $('dashStats');
+      stats.replaceChildren();
+      [['Conversaciones', all.length], ['Mensajes', total], ['Tus preguntas', mine], ['Sesión desde', since]].forEach(([label, value]) => {
+        const card = document.createElement('div');
+        card.className = 'rounded-2xl border border-navy-200 bg-navy-50/60 p-4 dark:border-navy-800 dark:bg-navy-900';
+        card.innerHTML = '<div class="text-2xl font-semibold text-navy-700 dark:text-navy-100"></div><div class="mt-1 text-xs text-navy-600 dark:text-navy-300"></div>';
+        card.firstChild.textContent = value;
+        card.lastChild.textContent = label;
+        stats.appendChild(card);
+      });
+
+      const recent = $('dashRecent');
+      recent.replaceChildren();
+      const entries = Object.entries(chats).reverse().slice(0, 5);
+      if (!entries.length) {
+        recent.innerHTML = '<p class="rounded-2xl border border-dashed border-navy-200 p-4 text-sm text-navy-600 dark:border-navy-700 dark:text-navy-300">Aún no tienes conversaciones. Abre arpIA para empezar una.</p>';
+      }
+      entries.forEach(([id, c]) => {
+        const b = document.createElement('button');
+        b.className = 'flex w-full items-center justify-between gap-3 rounded-xl border border-navy-200 px-4 py-3 text-left text-sm hover:bg-navy-50 dark:border-navy-800 dark:hover:bg-navy-900';
+        b.innerHTML = '<span class="truncate"></span><span class="shrink-0 text-xs text-navy-600 dark:text-navy-300"></span>';
+        b.firstChild.textContent = c.title;
+        b.lastChild.textContent = `${c.messages.length} mensajes`;
+        b.addEventListener('click', () => openChat(id));
+        recent.appendChild(b);
+      });
+    }
+
+    /* =====================================================================
+       11. INICIO
+       ===================================================================== */
+    SUGGESTIONS.forEach(({ icon, text }) => {
+      const b = document.createElement('button');
+      b.className = 'flex items-center gap-2 rounded-full border border-navy-200 px-4 py-2 text-sm hover:bg-navy-50 dark:border-navy-700 dark:hover:bg-navy-800';
+      b.innerHTML = `<i data-i="${icon}" class="h-4 w-4 text-navy-500 dark:text-navy-300"></i><span></span>`;
+      b.lastChild.textContent = text;
+      b.addEventListener('click', () => send(text));
+      $('suggestions').appendChild(b);
+    });
+
+    hydrateIcons();
+    drawMascot();
+    drawLogos();
+    setMascot('idle');
+    renderHistory();
+    (async () => {
+      // ¿Ya hay una sesión activa? (cookie en producción, sessionStorage en la demo)
+      try { user = (await authApi.me())?.user || null; } catch { user = null; }
+      updateAuthUI();
+      go(user ? 'chat' : 'login');
+      showCredsStep();
+      setTimeout(hopMascot, 500);
+    })();
+  </script>
+</body>
+</html>
