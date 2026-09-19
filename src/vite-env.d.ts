@@ -11,6 +11,8 @@ interface ImportMetaEnv {
   readonly VITE_AGENT_URL?: string
   /** `'true'` para que el chat use el mock en vez del agente real. */
   readonly VITE_CHAT_MOCK?: string
+  /** `'true'` para habilitar el Dashboard (bloqueado por defecto). */
+  readonly VITE_DASHBOARD_ENABLED?: string
 }
 
 interface ImportMeta {

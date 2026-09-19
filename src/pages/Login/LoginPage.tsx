@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import type { LoginChallenge, User } from '../../interfaces/auth'
-import { MascotLogo } from '../components/MascotLogo'
 import { CredentialsStep } from './modules/CredentialsStep'
 import { OtpStep } from './modules/OtpStep'
 
@@ -41,9 +40,7 @@ export function LoginPage({ showNotice, onLoggedIn, autoFocus }: LoginPageProps)
     <section className="scroll-thin flex flex-1 overflow-y-auto px-4 py-8">
       <div className="m-auto w-full max-w-sm">
         <div className="mb-6 text-center">
-          <div role="img" aria-label="Logo de arpIA" className="mx-auto mb-3 h-20 w-20">
-            <MascotLogo className="h-20 w-20" />
-          </div>
+          <img src="/arpi_logo.png" alt="Logo de arpIA" className="mx-auto mb-3 h-24 w-24 object-contain" />
           <h1 className="text-3xl text-navy-800 dark:text-navy-50">arpIA</h1>
           <p className="mt-2 text-sm italic text-navy-600 dark:text-navy-300">
             Del aire al espacio, tu copiloto inteligente.

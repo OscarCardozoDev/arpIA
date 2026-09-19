@@ -2,9 +2,18 @@ import { useState } from 'react'
 import type { View } from '../../interfaces/navigation'
 import type { User } from '../../interfaces/auth'
 import type { Conversation } from '../../interfaces/conversation'
+import type { DashboardPage } from '../Dashboard/interfaces/dashboard'
+import { DASHBOARD_ENABLED } from '../../services/config'
 import { Icon } from './Icon'
 import { SidebarHistory } from './SidebarHistory'
 import { UserProfile } from './UserProfile'
+
+/** Páginas del dashboard mostradas en el sidebar: valor, icono y texto. */
+const DASHBOARD_PAGES: Array<{ value: DashboardPage; icon: 'home' | 'table' | 'chart'; label: string }> = [
+  { value: 'home', icon: 'home', label: 'Inicio' },
+  { value: 'tables', icon: 'table', label: 'Tablas y conteos' },
+  { value: 'charts', icon: 'chart', label: 'Gráficas y mapas' },
+]
 
 interface SidebarProps {
   user: User | null
@@ -19,9 +28,11 @@ interface SidebarProps {
   activeConversationId: string | null
   onSelectConversation(id: string): void
   onLogout(): void
+  dashboardPage: DashboardPage
+  onDashboardPageChange(page: DashboardPage): void
 }
 
-/** Contenido del sidebar: logo, navegación principal, herramientas de chat (o aviso de inicio de sesión) y perfil. */
+/** Contenido del sidebar: logo, navegación principal, herramientas de chat/dashboard (o aviso de inicio de sesión) y perfil. */
 export function Sidebar({
   user,
   view,
@@ -35,6 +46,8 @@ export function Sidebar({
   activeConversationId,
   onSelectConversation,
   onLogout,
+  dashboardPage,
+  onDashboardPageChange,
 }: SidebarProps) {
   const [query, setQuery] = useState('')
 
@@ -56,13 +69,15 @@ export function Sidebar({
         <button
           type="button"
           onClick={() => onNavigate('dashboard')}
+          disabled={!DASHBOARD_ENABLED}
+          title={DASHBOARD_ENABLED ? undefined : 'Dashboard no disponible por ahora'}
           aria-current={view === 'dashboard' ? 'page' : undefined}
-          className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm hover:bg-navy-800 ${
+          className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent ${
             view === 'dashboard' ? 'bg-navy-800' : ''
           }`}
         >
           <Icon name="dashboard" className="h-[18px] w-[18px]" /> Dashboard
-          {!user && <Icon name="lock" className="ml-auto h-4 w-4 text-navy-300" />}
+          {(!user || !DASHBOARD_ENABLED) && <Icon name="lock" className="ml-auto h-4 w-4 text-navy-300" />}
         </button>
         <button
           type="button"
@@ -94,7 +109,28 @@ export function Sidebar({
           </div>
         )}
 
-        {user && (
+        {user && view === 'dashboard' && (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <p className="px-5 pb-1 pt-4 text-xs font-medium text-navy-300">Páginas del dashboard</p>
+            <nav className="space-y-0.5 px-2.5" aria-label="Páginas del dashboard">
+              {DASHBOARD_PAGES.map(({ value, icon, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => onDashboardPageChange(value)}
+                  aria-current={dashboardPage === value ? 'page' : undefined}
+                  className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm hover:bg-navy-800 ${
+                    dashboardPage === value ? 'bg-navy-800' : ''
+                  }`}
+                >
+                  <Icon name={icon} className="h-[18px] w-[18px]" /> {label}
+                </button>
+              ))}
+            </nav>
+          </div>
+        )}
+
+        {user && view === 'chat' && (
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="mt-3 space-y-0.5 px-2.5">
               <button

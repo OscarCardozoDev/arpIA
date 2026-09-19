@@ -29,3 +29,8 @@ estado en la interfaz (HTTP 200 con error, según el contrato real).
 
 Los `chunk_id` citados en las respuestas simuladas (`[DOC-xxxxxxxxxx-NN]`) son
 ficticios y no corresponden a documentos reales del corpus.
+
+`dashboardRouter.mock.ts` (`mockRouteInstruction`) es un enrutador de
+DEMOSTRACIÓN por palabras clave para la instrucción en lenguaje natural del
+Dashboard, activo solo con `VITE_USE_MOCKS`; no es el agente de visualización
+real (`POST /dashboard/consultar`).

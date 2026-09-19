@@ -45,3 +45,10 @@ export const OTP_LENGTH = 6
 
 /** Segundos de espera antes de permitir reenviar el código de verificación. */
 export const OTP_RESEND_SECONDS = 30
+
+/**
+ * Si es `false`, el Dashboard queda bloqueado: el botón del sidebar se deshabilita y
+ * cualquier intento de abrirlo lleva al chat. Por defecto bloqueado; se activa con
+ * `VITE_DASHBOARD_ENABLED=true`.
+ */
+export const DASHBOARD_ENABLED: boolean = import.meta.env.VITE_DASHBOARD_ENABLED === 'true'

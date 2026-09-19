@@ -116,4 +116,17 @@ export const iconPaths: Record<IconName, ReactElement> = {
       <path d="M14 2v6h6" />
     </>
   ),
+  home: <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1Z" />,
+  table: (
+    <>
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M3 9h18M3 15h18M9 3v18" />
+    </>
+  ),
+  chart: (
+    <>
+      <path d="M3 3v18h18" />
+      <path d="M8 17V9M13 17V5M18 17v-6" />
+    </>
+  ),
 }

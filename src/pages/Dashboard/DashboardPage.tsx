@@ -1,68 +1,100 @@
-import type { User } from '../../interfaces/auth'
-import type { Conversation } from '../../interfaces/conversation'
-import { Icon } from '../components/Icon'
-import { computeStats, firstName, recentConversations } from './services/dashboardStats'
-import { StatCard } from './modules/StatCard'
-import { RecentConversations } from './modules/RecentConversations'
-import { SecurityCard } from './modules/SecurityCard'
+import { useEffect, useRef, useState } from 'react'
+import type { DashboardPage as DashboardPageId } from './interfaces/dashboard'
+import { useDashboard } from './hooks/useDashboard'
+import { AskBar } from './modules/AskBar'
+import { FilterBar } from './modules/FilterBar'
+import { SpecNotice } from './modules/SpecNotice'
+import { EvidencePanel } from './modules/EvidencePanel'
+import { HomeView } from './modules/HomeView'
+import { TablesView } from './modules/TablesView'
+import { ChartsView } from './modules/charts/ChartsView'
 
 export interface DashboardPageProps {
-  user: User
-  conversations: Conversation[]
-  onOpenConversation(id: string): void
-  onOpenChat(): void
+  page: DashboardPageId
+  onPageChange(page: DashboardPageId): void
 }
 
-/** Resumen de actividad de la sesión actual (datos locales, sin backend). */
-export function DashboardPage({ user, conversations, onOpenConversation, onOpenChat }: DashboardPageProps) {
-  const stats = computeStats(user, conversations)
-  const recent = recentConversations(conversations)
+/**
+ * Tablero de los tres fenómenos del reto: barra global (instrucción en
+ * lenguaje natural + filtros), la página activa (Inicio / Tablas / Gráficas)
+ * y el panel de evidencia. Toda la lógica vive en `useDashboard`.
+ */
+export function DashboardPage({ page, onPageChange }: DashboardPageProps) {
+  const dashboard = useDashboard({ onPageChange })
+  const [askValue, setAskValue] = useState('')
+  const bodyRef = useRef<HTMLDivElement>(null)
+
+  // Vuelve al tope del contenido al cambiar de página o al aplicar una especificación.
+  useEffect(() => {
+    bodyRef.current?.scrollTo({ top: 0 })
+  }, [page, dashboard.spec])
+
+  function handleAsk(text: string) {
+    setAskValue(text)
+    void dashboard.consult(text)
+  }
 
   return (
-    <div className="scroll-thin flex-1 overflow-y-auto">
-      <div className="mx-auto w-full max-w-4xl px-4 py-6 md:py-10">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold text-navy-800 dark:text-navy-50">
-              Hola, {firstName(user.name)}
-            </h1>
-            <p className="mt-1 text-sm text-navy-600 dark:text-navy-300">
-              Resumen de tu actividad con arpIA.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onOpenChat}
-            className="flex items-center gap-2 rounded-xl bg-navy-500 px-4 py-2 text-sm font-medium text-white hover:bg-navy-600 dark:bg-navy-400 dark:text-navy-950 dark:hover:bg-navy-300"
-          >
-            <Icon name="spark" className="h-4 w-4" /> Abrir arpIA
-          </button>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="border-b border-navy-200 px-3 py-3 dark:border-navy-800 md:px-4">
+        <div className="mx-auto w-full max-w-6xl space-y-3">
+          <AskBar value={askValue} onChange={setAskValue} onSubmit={() => handleAsk(askValue)} consulting={dashboard.consulting} />
+          <FilterBar
+            corpus={dashboard.corpus}
+            filters={dashboard.filters}
+            docs={dashboard.docs}
+            excludedUndated={dashboard.excludedUndated}
+            onTogglePhenomenon={dashboard.togglePhenomenon}
+            onCollectionChange={dashboard.setCollection}
+            onYearFromChange={dashboard.setYearFrom}
+            onYearToChange={dashboard.setYearTo}
+            onReset={dashboard.resetFilters}
+          />
         </div>
-
-        <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {stats.map((stat) => (
-            <StatCard key={stat.label} stat={stat} />
-          ))}
-        </div>
-
-        <div className="mt-8 grid gap-6 md:grid-cols-3">
-          <div className="md:col-span-2">
-            <h2 className="font-semibold">Conversaciones recientes</h2>
-            <div className="mt-3">
-              <RecentConversations conversations={recent} onOpenConversation={onOpenConversation} />
-            </div>
-          </div>
-          <div>
-            <h2 className="font-semibold">Seguridad</h2>
-            <SecurityCard />
-          </div>
-        </div>
-
-        <p className="mt-8 text-xs text-navy-600 dark:text-navy-300">
-          Vista de ejemplo: muestra los datos de esta sesión y aún no está conectada al backend del
-          Dashboard.
-        </p>
       </div>
+
+      <div ref={bodyRef} className="scroll-thin flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-6xl px-3 py-8 md:px-6 md:py-10">
+          <SpecNotice
+            page={page}
+            spec={dashboard.spec}
+            unrecognized={dashboard.unrecognized}
+            consultError={dashboard.consultError}
+            corpus={dashboard.corpus}
+            onAsk={handleAsk}
+          />
+          {page === 'home' && (
+            <HomeView
+              corpus={dashboard.corpus}
+              docs={dashboard.docs}
+              filters={dashboard.filters}
+              onAsk={handleAsk}
+              onPageChange={onPageChange}
+            />
+          )}
+          {page === 'tables' && (
+            <TablesView
+              corpus={dashboard.corpus}
+              docs={dashboard.docs}
+              sort={dashboard.sort}
+              onToggleSort={dashboard.toggleSort}
+              onOpenEvidence={dashboard.openEvidence}
+            />
+          )}
+          {page === 'charts' && (
+            <ChartsView
+              corpus={dashboard.corpus}
+              docs={dashboard.docs}
+              filters={dashboard.filters}
+              tab={dashboard.tab}
+              onTabChange={dashboard.setTab}
+              onOpenEvidence={dashboard.openEvidence}
+            />
+          )}
+        </div>
+      </div>
+
+      <EvidencePanel evidence={dashboard.evidence} corpus={dashboard.corpus} onClose={dashboard.closeEvidence} />
     </div>
   )
 }

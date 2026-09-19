@@ -4,8 +4,8 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  /* Special Elite solo existe en peso normal; si no carga, cae a una fuente de máquina de escribir */
-  --font-sans: "Special Elite", "Courier New", ui-monospace, monospace;
+  /* Inter: sans-serif de alta legibilidad en pantalla; si no carga, cae a la sans-serif del sistema */
+  --font-sans: "Inter", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
 
   /* Azul oscuro institucional en versión pastel (el 500 es el color principal) */
   --color-navy-50: #eef2f9;
@@ -33,10 +33,15 @@ html {
 }
 
 body {
-  /* Special Elite no tiene negrita: se evita la "negrita falsa" del navegador, que emborrona el trazo */
+  /* Inter trae negritas reales: no se deja que el navegador las simule */
   font-synthesis: none;
   overflow: hidden;
   @apply bg-white text-navy-950 antialiased font-sans dark:bg-navy-950 dark:text-navy-50;
+}
+
+/* Títulos en negrita; el !important gana a clases como font-medium que traen algunos títulos */
+body :is(h1, h2, h3) {
+  font-weight: 700 !important;
 }
 
 /* Scrollbar discreta, como en las apps de chat modernas */

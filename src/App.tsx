@@ -13,6 +13,9 @@ import { SplashScreen } from './pages/components/SplashScreen'
 import { ChatPage } from './pages/Chat/ChatPage'
 import { LoginPage } from './pages/Login/LoginPage'
 import { DashboardPage } from './pages/Dashboard/DashboardPage'
+import type { DashboardPage as DashboardPageId } from './pages/Dashboard/interfaces/dashboard'
+import { DASHBOARD_PAGE_NAMES } from './pages/Dashboard/services/phenomena'
+import { DASHBOARD_ENABLED } from './services/config'
 
 const VIEW_TITLES: Record<View, string> = { login: 'Iniciar sesión', dashboard: 'Dashboard', chat: 'arpIA' }
 
@@ -26,15 +29,37 @@ function App() {
   const [notice, setNotice] = useState(false)
   // Se incrementa para que la mascota salte (saludo al iniciar sesión o al abrir un chat nuevo).
   const [hopSignal, setHopSignal] = useState(0)
+  // Página activa del Dashboard; la comparten Sidebar, TopBar y DashboardPage.
+  const [dashboardPage, setDashboardPage] = useState<DashboardPageId>('home')
 
   // Vista efectiva coherente con la sesión: sin usuario siempre se ve el login, aunque `view` diga otra cosa.
-  const effectiveView: View = auth.user ? (view === 'login' ? 'chat' : view) : 'login'
+  // Con el Dashboard bloqueado (DASHBOARD_ENABLED = false), esa vista cae siempre al chat.
+  const effectiveView: View = auth.user
+    ? view === 'login' || (view === 'dashboard' && !DASHBOARD_ENABLED)
+      ? 'chat'
+      : view
+    : 'login'
+
+  const topBarTitle =
+    effectiveView === 'dashboard' ? `Dashboard · ${DASHBOARD_PAGE_NAMES[dashboardPage]}` : VIEW_TITLES[effectiveView]
 
   useEffect(() => {
-    document.title = effectiveView === 'chat' ? 'arpIA' : `${VIEW_TITLES[effectiveView]} · arpIA`
-  }, [effectiveView])
+    if (effectiveView === 'dashboard') {
+      document.title = `${DASHBOARD_PAGE_NAMES[dashboardPage]} · arpIA`
+    } else {
+      document.title = effectiveView === 'chat' ? 'arpIA' : `${VIEW_TITLES[effectiveView]} · arpIA`
+    }
+  }, [effectiveView, dashboardPage])
+
+  function handleDashboardPageChange(page: DashboardPageId) {
+    if (!DASHBOARD_ENABLED) return
+    setDashboardPage(page)
+    setView('dashboard')
+    sidebar.closeOnMobile()
+  }
 
   function go(next: View) {
+    if (next === 'dashboard' && !DASHBOARD_ENABLED) return
     if (!auth.user && next !== 'login') {
       setView('login')
       setNotice(true)
@@ -92,24 +117,21 @@ function App() {
           activeConversationId={conversations.activeId}
           onSelectConversation={handleOpenConversation}
           onLogout={() => void handleLogout()}
+          dashboardPage={dashboardPage}
+          onDashboardPageChange={handleDashboardPageChange}
         />
       }
       topBar={
         <TopBar
-          title={VIEW_TITLES[effectiveView]}
+          title={topBarTitle}
           onOpenSidebar={() => sidebar.setOpen(true)}
           themeToggle={<ThemeToggle theme={theme.theme} onToggle={theme.toggleTheme} />}
         />
       }
     >
       {effectiveView === 'login' && <LoginPage showNotice={notice} onLoggedIn={handleLoggedIn} autoFocus={sidebar.isDesktop} />}
-      {effectiveView === 'dashboard' && auth.user && (
-        <DashboardPage
-          user={auth.user}
-          conversations={conversations.conversations}
-          onOpenConversation={handleOpenConversation}
-          onOpenChat={() => go('chat')}
-        />
+      {DASHBOARD_ENABLED && effectiveView === 'dashboard' && auth.user && (
+        <DashboardPage page={dashboardPage} onPageChange={handleDashboardPageChange} />
       )}
       {/* Siempre montado con sesión iniciada: si se desmontara, una respuesta en curso quedaría cortada. */}
       {auth.user && (
