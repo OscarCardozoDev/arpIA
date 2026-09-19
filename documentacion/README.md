@@ -20,7 +20,7 @@ y hablan con el mismo backend:
 | Página | Subdominio | Endpoint del backend | Estado |
 |---|---|---|---|
 | Chat | `frontagent.<equipo>…` | `POST /chat` | En desarrollo |
-| Dashboard | `dashboard.<equipo>…` | `POST /dashboard/consultar` | En pausa |
+| Dashboard | `dashboard.<equipo>…` | `POST /dashboard/consultar` | Mock + datos reales del diagnóstico |
 | Login | (sin subdominio propio) | `POST /auth/*` | Mock |
 
 ## Organización del código
